@@ -17,6 +17,7 @@
       width: 100vw;
       height: 100vh;
       user-select: none;
+      touch-action: none;
     }
 
     #webgl-canvas {
@@ -104,7 +105,7 @@
       <p class="subtitulo">Gira el corazón para ver nuestras fotos y videos</p>
     </div>
     <div class="instrucciones">
-      ✨ Arrastra para girar • Toca un recuerdo al frente para cambiarlo
+      ✨ Arrastra o dale un impulso rápido para girar • Toca un recuerdo al frente para cambiarlo
     </div>
   </div>
 
@@ -116,10 +117,6 @@
   <script>
     /* =========================================================================
        1. TUS 8 ARCHIVOS (FOTOS Y VIDEOS)
-       Configura aquí las rutas de tus archivos y las frases de cada uno.
-       Formatos compatibles:
-         - Imagen: 'jpg', 'jpeg', 'png', 'webp'
-         - Video:  'mp4', 'webm'
        ========================================================================= */
     const misArchivos = [
       { tipo: 'imagen', ruta: 'img/foto1.jpg',  texto: 'Nuestro primer día ✨' },
@@ -300,7 +297,7 @@
       arrayPlacas.push(mesh);
     }
 
-    // --- CARGA AUTOMÁTICA DE ARCHIVOS LOCALES DEFINIDOS ---
+    // --- CARGA AUTOMÁTICA DE ARCHIVOS LOCALES ---
     function aplicarImagenAPlaca(placa, url, texto) {
       const img = new Image();
       img.onload = function() {
@@ -376,38 +373,52 @@
 
     cargarArchivosIniciales();
 
-    // --- INTERACCIÓN DE ROTACIÓN (DRAG CON MOUSE / TOUCH) ---
+    // --- INTERACCIÓN RÁPIDA, SENSIBLE Y CON INERCIA DINÁMICA ---
     let arrastrando = false;
     let clickX = 0;
     let clickY = 0;
-    let velRotY = 0;
+    let ultimoTiempo = 0;
+
+    // Sensibilidad aumentada para respuesta instantánea y ágil
+    const SENSIBILIDAD_X = 0.012;
+    const SENSIBILIDAD_Y = 0.007;
+
+    // Velocidad de crucero por defecto
+    let velRotY = 0.0035;
     let velRotX = 0;
-    let rotObjetivoY = 0;
-    let rotObjetivoX = 0;
     let distanciaRecorrida = 0;
 
     window.addEventListener('pointerdown', (e) => {
       arrastrando = true;
       clickX = e.clientX;
       clickY = e.clientY;
+      ultimoTiempo = performance.now();
       distanciaRecorrida = 0;
     });
 
     window.addEventListener('pointermove', (e) => {
       if (!arrastrando) return;
+      const ahora = performance.now();
+      const dt = Math.max(1, ahora - ultimoTiempo);
+
       const dx = e.clientX - clickX;
       const dy = e.clientY - clickY;
       distanciaRecorrida += Math.hypot(dx, dy);
 
-      velRotY = dx * 0.005;
-      velRotX = dy * 0.003;
+      // Movimiento directo e instantáneo al arrastrar (sin retraso)
+      universoRotatorio.rotation.y += dx * SENSIBILIDAD_X;
+      universoRotatorio.rotation.x += dy * SENSIBILIDAD_Y;
 
-      rotObjetivoY += velRotY;
-      rotObjetivoX += velRotX;
-      rotObjetivoX = Math.max(-0.6, Math.min(0.6, rotObjetivoX));
+      // Calcular velocidad de impulso instantánea basada en el tiempo real
+      velRotY = (dx / dt) * 0.16;
+      velRotX = (dy / dt) * 0.09;
+
+      // Limitar límites de cabeceo vertical
+      universoRotatorio.rotation.x = Math.max(-0.55, Math.min(0.55, universoRotatorio.rotation.x));
 
       clickX = e.clientX;
       clickY = e.clientY;
+      ultimoTiempo = ahora;
     });
 
     window.addEventListener('pointerup', (e) => {
@@ -415,9 +426,13 @@
         seleccionarObjeto(e.clientX, e.clientY);
       }
       arrastrando = false;
+
+      // Limitar velocidad máxima del lanzamiento para evitar que gire descontrolado
+      velRotY = Math.max(-0.08, Math.min(0.08, velRotY));
+      velRotX = Math.max(-0.04, Math.min(0.04, velRotX));
     });
 
-    // --- SUBIDA MANUAL DE RESPALDO (POR SI DESEAS CAMBIAR ALGUNO AL CLIC) ---
+    // --- SELECCIÓN Y SUBIDA MANUAL ---
     const raycaster = new THREE.Raycaster();
     const mouseCoord = new THREE.Vector2();
     let marcoSeleccionado = null;
@@ -470,7 +485,7 @@
       return 0;
     }
 
-    // --- BUCLE DE RENDER Y ANIMACIÓN ---
+    // --- BUCLE PRINCIPAL DE ANIMACIÓN ---
     const reloj = new THREE.Clock();
     const vecMundo = new THREE.Vector3();
 
@@ -478,14 +493,26 @@
       requestAnimationFrame(animate);
       const tiempo = reloj.getElapsedTime();
 
+      // FÍSICA DE GIRO FLUIDO
       if (!arrastrando) {
-        rotObjetivoY += 0.0022; // Giro automático continuo
+        universoRotatorio.rotation.y += velRotY;
+        universoRotatorio.rotation.x += velRotX;
+
+        // Fricción baja y realista: mantiene el impulso bastante tiempo
+        velRotY *= 0.965;
+        velRotX *= 0.92;
+
+        // Velocidad orbital base para que nunca se quede detenido
+        const dir = velRotY >= 0 ? 1 : -1;
+        if (Math.abs(velRotY) < 0.0035) {
+          velRotY = dir * 0.0035;
+        }
+
+        // Recuperar nivelación vertical suavemente
+        universoRotatorio.rotation.x *= 0.96;
       }
 
-      universoRotatorio.rotation.y += (rotObjetivoY - universoRotatorio.rotation.y) * 0.08;
-      universoRotatorio.rotation.x += (rotObjetivoX - universoRotatorio.rotation.x) * 0.08;
-
-      // Animación de pulso
+      // Latido orgánico de partículas
       const pulso = latido(tiempo * 1.15);
       const esc = 1.0 + pulso * 0.09;
       meshCorazon.scale.set(esc, esc, esc);
@@ -500,7 +527,7 @@
       }
       geoCorazon.attributes.position.needsUpdate = true;
 
-      // REVELAR SEGÚN ÁNGULO Y ORIENTACIÓN FRONTAL
+      // REVELAR SEGÚN ÁNGULO Y ORIENTACIÓN
       arrayPlacas.forEach((placa) => {
         placa.getWorldPosition(vecMundo);
 
@@ -516,7 +543,7 @@
 
         placa.quaternion.copy(camera.quaternion);
 
-        // Optimización: pausar videos fuera del ángulo de visión
+        // Optimización de reproducción de video según visión frontal
         if (placa.userData.videoElemento) {
           if (opacidad < 0.05 && !placa.userData.videoElemento.paused) {
             placa.userData.videoElemento.pause();
