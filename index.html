@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Para Juliana ❤️</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;600;800&family=Playfair+Display:ital,wght@1,600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #020005;
+      color: #fff;
+      font-family: 'Montserrat', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #webgl-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+      cursor: grab;
+    }
+
+    #webgl-canvas:active {
+      cursor: grabbing;
+    }
+
+    .ui-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 30px 20px 20px;
+    }
+
+    .header-box {
+      text-align: center;
+      animation: fadeIn 2s ease-out;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: clamp(1.8rem, 4.5vw, 3rem);
+      letter-spacing: 2px;
+      color: #ffffff;
+      text-shadow: 0 0 20px rgba(255, 32, 64, 0.8), 0 0 45px rgba(255, 32, 64, 0.4);
+    }
+
+    h1 span {
+      color: #ff3366;
+      text-shadow: 0 0 25px #ff3366, 0 0 50px rgba(255, 51, 102, 0.7);
+    }
+
+    .subtitulo {
+      margin-top: 6px;
+      font-size: clamp(0.72rem, 1.8vw, 0.9rem);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255, 180, 200, 0.75);
+    }
+
+    .instrucciones {
+      text-align: center;
+      font-size: 0.8rem;
+      letter-spacing: 1.2px;
+      color: rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px 22px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="webgl-canvas"></canvas>
+
+  <div class="ui-overlay">
+    <div class="header-box">
+      <h1>Nuestro Universo • <span>Juliana</span></h1>
+      <p class="subtitulo">Gira el corazón para ver nuestras fotos y videos</p>
+    </div>
+    <div class="instrucciones">
+      ✨ Arrastra para girar • Toca un recuerdo al frente para cambiarlo
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*,video/*">
+
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    /* =========================================================================
+       1. TUS 8 ARCHIVOS (FOTOS Y VIDEOS)
+       Configura aquí las rutas de tus archivos y las frases de cada uno.
+       Formatos compatibles:
+         - Imagen: 'jpg', 'jpeg', 'png', 'webp'
+         - Video:  'mp4', 'webm'
+       ========================================================================= */
+    const misArchivos = [
+      { tipo: 'imagen', ruta: 'img/foto1.jpg',  texto: 'Nuestro primer día ✨' },
+      { tipo: 'video',  ruta: 'img/video1.mp4', texto: 'Tu risa favorita 🥰' },
+      { tipo: 'imagen', ruta: 'img/foto2.jpg',  texto: 'Cada aventura juntos ✈️' },
+      { tipo: 'video',  ruta: 'img/video2.mp4', texto: 'Un día inolvidable 💫' },
+      { tipo: 'imagen', ruta: 'img/foto3.jpg',  texto: 'Mi lugar seguro ❤️' },
+      { tipo: 'imagen', ruta: 'img/foto4.jpg',  texto: 'Bailando juntos 🎶' },
+      { tipo: 'video',  ruta: 'img/foto6.mp4', texto: 'Atardecer a tu lado 🌅' },
+      { tipo: 'imagen', ruta: 'img/foto5.jpg',  texto: 'Por siempre tú y yo 💍' }
+    ];
+
+    // --- CONFIGURACIÓN BÁSICA DE ESCENA ---
+    const canvas = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020005, 0.038);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 9.2);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x020005, 1);
+
+    const universoRotatorio = new THREE.Group();
+    scene.add(universoRotatorio);
+
+    // --- TEXTURA GLOW DE PARTÍCULAS ---
+    function crearTexturaParticula() {
+      const c = document.createElement('canvas');
+      c.width = 64;
+      c.height = 64;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      grad.addColorStop(0.25, 'rgba(255, 80, 120, 0.9)');
+      grad.addColorStop(0.65, 'rgba(255, 20, 60, 0.35)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const spriteBrillo = crearTexturaParticula();
+
+    // --- CORAZÓN CENTRAL EN PARTÍCULAS ---
+    function formulaCorazon(t) {
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return { x: x / 15, y: y / 15 };
+    }
+
+    const CANT_PARTICULAS = 15000;
+    const posCorazon = new Float32Array(CANT_PARTICULAS * 3);
+    const origCorazon = new Float32Array(CANT_PARTICULAS * 3);
+    const colCorazon = new Float32Array(CANT_PARTICULAS * 3);
+    const fasesLatido = new Float32Array(CANT_PARTICULAS);
+
+    const cRojo = new THREE.Color(0xff1744);
+    const cRosa = new THREE.Color(0xff80ab);
+    const cBlanco = new THREE.Color(0xffffff);
+    const colorTmp = new THREE.Color();
+
+    for (let i = 0; i < CANT_PARTICULAS; i++) {
+      const t = Math.random() * Math.PI * 2;
+      const { x, y } = formulaCorazon(t);
+      const capa = Math.pow(Math.random(), 0.4);
+
+      const px = x * capa + (Math.random() - 0.5) * 0.08;
+      const py = y * capa + (Math.random() - 0.5) * 0.08;
+      const pz = (Math.random() - 0.5) * 0.85 * capa;
+
+      posCorazon[i * 3]     = px * 1.6;
+      posCorazon[i * 3 + 1] = py * 1.6;
+      posCorazon[i * 3 + 2] = pz * 1.6;
+
+      origCorazon[i * 3]     = px * 1.6;
+      origCorazon[i * 3 + 1] = py * 1.6;
+      origCorazon[i * 3 + 2] = pz * 1.6;
+
+      if (Math.random() < 0.15) {
+        colorTmp.copy(cBlanco);
+      } else {
+        colorTmp.copy(cRojo).lerp(cRosa, capa * 0.9);
+      }
+
+      colCorazon[i * 3]     = colorTmp.r;
+      colCorazon[i * 3 + 1] = colorTmp.g;
+      colCorazon[i * 3 + 2] = colorTmp.b;
+
+      fasesLatido[i] = Math.random() * Math.PI * 2;
+    }
+
+    const geoCorazon = new THREE.BufferGeometry();
+    geoCorazon.setAttribute('position', new THREE.BufferAttribute(posCorazon, 3));
+    geoCorazon.setAttribute('color', new THREE.BufferAttribute(colCorazon, 3));
+
+    const matCorazon = new THREE.PointsMaterial({
+      size: 0.065,
+      map: spriteBrillo,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const meshCorazon = new THREE.Points(geoCorazon, matCorazon);
+    universoRotatorio.add(meshCorazon);
+
+    // --- CREACIÓN DE LOS 8 MARCOS ---
+    function generarCanvasPlaceholder(texto) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 640;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 512, 640);
+
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0, '#2e0819');
+      grad.addColorStop(1, '#0e0208');
+      ctx.fillStyle = grad;
+      ctx.fillRect(25, 25, 462, 462);
+
+      ctx.fillStyle = '#ff3366';
+      ctx.font = '65px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('❤', 256, 235);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.font = '22px Montserrat, sans-serif';
+      ctx.fillText('Cargando recuerdo...', 256, 285);
+
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = 'italic 28px "Playfair Display", serif';
+      ctx.fillText(texto, 256, 565);
+
+      return new THREE.CanvasTexture(c);
+    }
+
+    const NUM_RECUERDOS = 8;
+    const RADIO_ORBITA = 4.2;
+    const arrayPlacas = [];
+    const videosActivos = [];
+
+    for (let i = 0; i < NUM_RECUERDOS; i++) {
+      const angulo = (i / NUM_RECUERDOS) * Math.PI * 2;
+      const x = Math.sin(angulo) * RADIO_ORBITA;
+      const z = Math.cos(angulo) * RADIO_ORBITA;
+      const y = Math.sin(i * 1.8) * 0.75;
+
+      const geo = new THREE.PlaneGeometry(1.4, 1.75);
+      const textoDefecto = misArchivos[i] ? misArchivos[i].texto : "Recuerdo " + (i + 1);
+      const tex = generarCanvasPlaceholder(textoDefecto);
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.userData = {
+        indice: i,
+        anguloBase: angulo,
+        alturaBase: y,
+        videoElemento: null,
+        textoNota: textoDefecto
+      };
+
+      universoRotatorio.add(mesh);
+      arrayPlacas.push(mesh);
+    }
+
+    // --- CARGA AUTOMÁTICA DE ARCHIVOS LOCALES DEFINIDOS ---
+    function aplicarImagenAPlaca(placa, url, texto) {
+      const img = new Image();
+      img.onload = function() {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 640;
+        const ctx = c.getContext('2d');
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 512, 640);
+
+        const mw = 462, mh = 462;
+        const escala = Math.max(mw / img.width, mh / img.height);
+        const w = img.width * escala;
+        const h = img.height * escala;
+        const ox = 25 + (mw - w) / 2;
+        const oy = 25 + (mh - h) / 2;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(25, 25, mw, mh);
+        ctx.clip();
+        ctx.drawImage(img, ox, oy, w, h);
+        ctx.restore();
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.font = 'italic 28px "Playfair Display", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(texto, 256, 565);
+
+        placa.material.map = new THREE.CanvasTexture(c);
+        placa.material.needsUpdate = true;
+      };
+      img.src = url;
+    }
+
+    function aplicarVideoAPlaca(placa, url) {
+      const video = document.createElement('video');
+      video.src = url;
+      video.crossOrigin = 'anonymous';
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('webkit-playsinline', 'true');
+      
+      video.play().catch(() => {
+        window.addEventListener('click', () => video.play(), { once: true });
+        window.addEventListener('touchstart', () => video.play(), { once: true });
+      });
+
+      const videoTex = new THREE.VideoTexture(video);
+      videoTex.minFilter = THREE.LinearFilter;
+      videoTex.magFilter = THREE.LinearFilter;
+
+      placa.material.map = videoTex;
+      placa.material.needsUpdate = true;
+      placa.userData.videoElemento = video;
+      videosActivos.push(video);
+    }
+
+    function cargarArchivosIniciales() {
+      misArchivos.forEach((item, i) => {
+        const placa = arrayPlacas[i];
+        if (!placa) return;
+
+        if (item.tipo === 'video') {
+          aplicarVideoAPlaca(placa, item.ruta);
+        } else {
+          aplicarImagenAPlaca(placa, item.ruta, item.texto);
+        }
+      });
+    }
+
+    cargarArchivosIniciales();
+
+    // --- INTERACCIÓN DE ROTACIÓN (DRAG CON MOUSE / TOUCH) ---
+    let arrastrando = false;
+    let clickX = 0;
+    let clickY = 0;
+    let velRotY = 0;
+    let velRotX = 0;
+    let rotObjetivoY = 0;
+    let rotObjetivoX = 0;
+    let distanciaRecorrida = 0;
+
+    window.addEventListener('pointerdown', (e) => {
+      arrastrando = true;
+      clickX = e.clientX;
+      clickY = e.clientY;
+      distanciaRecorrida = 0;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!arrastrando) return;
+      const dx = e.clientX - clickX;
+      const dy = e.clientY - clickY;
+      distanciaRecorrida += Math.hypot(dx, dy);
+
+      velRotY = dx * 0.005;
+      velRotX = dy * 0.003;
+
+      rotObjetivoY += velRotY;
+      rotObjetivoX += velRotX;
+      rotObjetivoX = Math.max(-0.6, Math.min(0.6, rotObjetivoX));
+
+      clickX = e.clientX;
+      clickY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (distanciaRecorrida < 6) {
+        seleccionarObjeto(e.clientX, e.clientY);
+      }
+      arrastrando = false;
+    });
+
+    // --- SUBIDA MANUAL DE RESPALDO (POR SI DESEAS CAMBIAR ALGUNO AL CLIC) ---
+    const raycaster = new THREE.Raycaster();
+    const mouseCoord = new THREE.Vector2();
+    let marcoSeleccionado = null;
+    const fileInput = document.getElementById('file-input');
+
+    function seleccionarObjeto(cx, cy) {
+      mouseCoord.x = (cx / window.innerWidth) * 2 - 1;
+      mouseCoord.y = -(cy / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouseCoord, camera);
+      const hits = raycaster.intersectObjects(arrayPlacas);
+
+      if (hits.length > 0) {
+        const obj = hits[0].object;
+        if (obj.material.opacity > 0.4) {
+          marcoSeleccionado = obj;
+          fileInput.click();
+        }
+      }
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const archivo = e.target.files[0];
+      if (!archivo || !marcoSeleccionado) return;
+
+      const urlArchivo = URL.createObjectURL(archivo);
+
+      if (marcoSeleccionado.userData.videoElemento) {
+        marcoSeleccionado.userData.videoElemento.pause();
+        marcoSeleccionado.userData.videoElemento.src = '';
+        const idx = videosActivos.indexOf(marcoSeleccionado.userData.videoElemento);
+        if (idx !== -1) videosActivos.splice(idx, 1);
+        marcoSeleccionado.userData.videoElemento = null;
+      }
+
+      if (archivo.type.startsWith('video/')) {
+        aplicarVideoAPlaca(marcoSeleccionado, urlArchivo);
+      } else {
+        aplicarImagenAPlaca(marcoSeleccionado, urlArchivo, marcoSeleccionado.userData.textoNota);
+      }
+
+      fileInput.value = '';
+    });
+
+    // --- LATIDO CARDÍACO ---
+    function latido(t) {
+      const ciclo = t % 1.0;
+      if (ciclo < 0.12) return Math.sin((ciclo / 0.12) * Math.PI);
+      if (ciclo >= 0.18 && ciclo < 0.32) return Math.sin(((ciclo - 0.18) / 0.14) * Math.PI) * 0.55;
+      return 0;
+    }
+
+    // --- BUCLE DE RENDER Y ANIMACIÓN ---
+    const reloj = new THREE.Clock();
+    const vecMundo = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const tiempo = reloj.getElapsedTime();
+
+      if (!arrastrando) {
+        rotObjetivoY += 0.0022; // Giro automático continuo
+      }
+
+      universoRotatorio.rotation.y += (rotObjetivoY - universoRotatorio.rotation.y) * 0.08;
+      universoRotatorio.rotation.x += (rotObjetivoX - universoRotatorio.rotation.x) * 0.08;
+
+      // Animación de pulso
+      const pulso = latido(tiempo * 1.15);
+      const esc = 1.0 + pulso * 0.09;
+      meshCorazon.scale.set(esc, esc, esc);
+      matCorazon.size = 0.065 + pulso * 0.02;
+
+      const pos = geoCorazon.attributes.position.array;
+      for (let i = 0; i < CANT_PARTICULAS; i++) {
+        const fase = fasesLatido[i];
+        pos[i * 3]     = origCorazon[i * 3]     + Math.sin(tiempo * 2.0 + fase) * 0.012;
+        pos[i * 3 + 1] = origCorazon[i * 3 + 1] + Math.cos(tiempo * 1.8 + fase) * 0.012;
+        pos[i * 3 + 2] = origCorazon[i * 3 + 2] + Math.sin(tiempo * 2.2 + fase) * 0.02;
+      }
+      geoCorazon.attributes.position.needsUpdate = true;
+
+      // REVELAR SEGÚN ÁNGULO Y ORIENTACIÓN FRONTAL
+      arrayPlacas.forEach((placa) => {
+        placa.getWorldPosition(vecMundo);
+
+        const visibilidad = (vecMundo.z - 0.3) / (RADIO_ORBITA * 0.88);
+        const opacidad = Math.max(0, Math.min(1, Math.pow(visibilidad, 2)));
+
+        placa.material.opacity = opacidad;
+
+        const escalaPlaca = 0.82 + opacidad * 0.28;
+        placa.scale.set(escalaPlaca, escalaPlaca, escalaPlaca);
+
+        placa.position.y = placa.userData.alturaBase + Math.sin(tiempo * 1.4 + placa.userData.indice) * 0.12;
+
+        placa.quaternion.copy(camera.quaternion);
+
+        // Optimización: pausar videos fuera del ángulo de visión
+        if (placa.userData.videoElemento) {
+          if (opacidad < 0.05 && !placa.userData.videoElemento.paused) {
+            placa.userData.videoElemento.pause();
+          } else if (opacidad >= 0.05 && placa.userData.videoElemento.paused) {
+            placa.userData.videoElemento.play();
+          }
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
